@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YK Finance Agent Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column; the diagram is the hero, reference tables follow in design order. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #19212d;
+  --muted: #5a6475;
+  --line: #d3d9e2;
+  --accent: #1f56c4;
+  --accent-soft: #e6eeff;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #19202a; --fg: #e5e9ef; --muted: #9aa4b4;
+    --line: #2f3846; --accent: #82a8ff; --accent-soft: #1d2a44; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #19202a; --fg: #e5e9ef; --muted: #9aa4b4;
+  --line: #2f3846; --accent: #82a8ff; --accent-soft: #1d2a44; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--sans);
+  font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 1000px; margin: 0 auto; display: grid; gap: 40px; }
+header { display: grid; gap: 8px; max-width: 68ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: 30px; line-height: 1.2; margin: 0; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0 0 10px; font-weight: 600; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--muted); font-size: 16px; }
+section { display: grid; gap: 12px; min-width: 0; }
+
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: grid; gap: 12px; }
+.diagram-wrap { overflow-x: auto; }
+svg.arch { display: block; width: 100%; min-width: 760px; height: auto; color: var(--fg); font-family: var(--sans); }
+.arch .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+.arch .box.ours { fill: var(--accent-soft); stroke: var(--accent); }
+.arch .title { font-size: 14px; font-weight: 600; fill: currentColor; }
+.arch .sub { font-size: 11.5px; fill: var(--muted); }
+.arch .lib { font-size: 11.5px; fill: var(--accent); font-weight: 500; }
+.arch .row { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; fill: var(--muted); }
+.arch .edge { stroke: currentColor; stroke-width: 1.4; fill: none; }
+.arch .lbl { font-size: 11.5px; fill: currentColor; }
+.arch .head { fill: currentColor; }
+figcaption { color: var(--muted); font-size: 13.5px; max-width: 80ch; }
+
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.status > div { min-width: 0; }
+.status h3 { font-size: 14px; margin: 0 0 6px; font-weight: 600; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; margin-left: 6px; vertical-align: 1px; }
+.pill.done { color: var(--accent); }
+.pill.prov { color: var(--muted); }
+ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 75ch; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 500; white-space: nowrap; }
+code { font-family: var(--mono); font-size: 13px; }
+.decisions { columns: 2 300px; column-gap: 32px; }
+.decisions li { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <span class="eyebrow">YK Finance · system design v1 · 25 Nov 2026</span>
+    <h1>YK Finance Agent Architecture</h1>
+    <p class="lede">A voice agent that calls borrowers about missed EMIs, records promises to pay and hands hard cases to humans, without breaking RBI or US collection rules.</p>
+  </header>
+
+  <figure>
+    <div class="diagram-wrap">
+      <svg class="arch" viewBox="0 0 1000 520" role="img" aria-label="Three stateless process types (API, workflow workers, voice workers) sit between outside systems (loan system, telephony, AI APIs) and the state stores (Temporal, object storage, Postgres). Compliance runs as a library inside the workflow and voice workers.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path class="head" d="M0,0 L10,5 L0,10 z"/>
+          </marker>
+        </defs>
+
+        <text class="row" x="40" y="22">OUTSIDE SYSTEMS</text>
+        <text class="row" x="40" y="180">OUR PROCESSES · HOLD NO IMPORTANT STATE</text>
+        <text class="row" x="340" y="312">STATE</text>
+
+        <!-- Outside systems -->
+        <rect class="box" x="40" y="32" width="200" height="62" rx="4"/>
+        <text class="title" x="140" y="58" text-anchor="middle">Lender's loan system</text>
+        <text class="sub" x="140" y="77" text-anchor="middle">system of record</text>
+
+        <rect class="box" x="400" y="32" width="300" height="62" rx="4"/>
+        <text class="title" x="550" y="58" text-anchor="middle">Telephony provider</text>
+        <text class="sub" x="550" y="77" text-anchor="middle">Twilio (demo) · Exotel / Plivo (India)</text>
+
+        <rect class="box" x="760" y="32" width="200" height="62" rx="4"/>
+        <text class="title" x="860" y="58" text-anchor="middle">STT · LLM · TTS</text>
+        <text class="sub" x="860" y="77" text-anchor="middle">plus backup providers</text>
+
+        <!-- Our processes -->
+        <rect class="box ours" x="40" y="188" width="200" height="80" rx="4"/>
+        <text class="title" x="140" y="218" text-anchor="middle">API</text>
+        <text class="sub" x="140" y="238" text-anchor="middle">webhooks · ops dashboard</text>
+
+        <rect class="box ours" x="300" y="188" width="220" height="80" rx="4"/>
+        <text class="title" x="410" y="214" text-anchor="middle">Workflow workers</text>
+        <text class="sub" x="410" y="233" text-anchor="middle">schedule · dial · retry · SMS</text>
+        <text class="lib" x="410" y="253" text-anchor="middle">+ compliance library</text>
+
+        <rect class="box ours" x="580" y="188" width="220" height="80" rx="4"/>
+        <text class="title" x="690" y="214" text-anchor="middle">Voice workers</text>
+        <text class="sub" x="690" y="233" text-anchor="middle">Pipecat · live calls</text>
+        <text class="lib" x="690" y="253" text-anchor="middle">+ compliance library</text>
+
+        <!-- State -->
+        <rect class="box" x="340" y="320" width="180" height="56" rx="4"/>
+        <text class="title" x="430" y="343" text-anchor="middle">Temporal</text>
+        <text class="sub" x="430" y="362" text-anchor="middle">timers · workflow progress</text>
+
+        <rect class="box" x="620" y="320" width="180" height="56" rx="4"/>
+        <text class="title" x="710" y="343" text-anchor="middle">Object storage</text>
+        <text class="sub" x="710" y="362" text-anchor="middle">call recordings</text>
+
+        <rect class="box" x="40" y="446" width="920" height="56" rx="4"/>
+        <text class="title" x="500" y="469" text-anchor="middle">Postgres</text>
+        <text class="sub" x="500" y="488" text-anchor="middle">cases · attempts · promises · outbox   |   compliance schema: stop flags · contact rules · decisions</text>
+
+        <!-- Edges -->
+        <line class="edge" x1="140" y1="94" x2="140" y2="186" marker-end="url(#arrow)"/>
+        <text class="lbl" x="132" y="140" text-anchor="end">EMI failed / paid</text>
+
+        <polyline class="edge" points="400,70 270,70 270,228 242,228" marker-end="url(#arrow)"/>
+        <text class="lbl" x="276" y="128">call events</text>
+
+        <line class="edge" x1="470" y1="188" x2="470" y2="96" marker-end="url(#arrow)"/>
+        <text class="lbl" x="462" y="150" text-anchor="end">dial</text>
+
+        <line class="edge" x1="650" y1="96" x2="650" y2="186" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+        <text class="lbl" x="658" y="150">call audio</text>
+
+        <line class="edge" x1="780" y1="186" x2="780" y2="96" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+        <text class="lbl" x="788" y="150">audio ↔ text</text>
+
+        <line class="edge" x1="140" y1="268" x2="140" y2="444" marker-end="url(#arrow)"/>
+        <text class="lbl" x="148" y="300">events</text>
+
+        <polyline class="edge" points="220,268 220,348 338,348" marker-end="url(#arrow)"/>
+        <text class="lbl" x="280" y="340" text-anchor="middle">start</text>
+
+        <line class="edge" x1="430" y1="270" x2="430" y2="318" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+        <text class="lbl" x="438" y="298">tasks · results</text>
+
+        <line class="edge" x1="320" y1="268" x2="320" y2="444" marker-end="url(#arrow)"/>
+        <text class="lbl" x="328" y="414">case state</text>
+
+        <line class="edge" x1="710" y1="268" x2="710" y2="318" marker-end="url(#arrow)"/>
+        <text class="lbl" x="718" y="298">recordings</text>
+
+        <line class="edge" x1="600" y1="268" x2="600" y2="444" marker-end="url(#arrow)"/>
+        <text class="lbl" x="592" y="414" text-anchor="end">promises · stop flags</text>
+      </svg>
+    </div>
+    <figcaption>The three blue process types keep no important state, so any of them can crash or be copied. Everything that must survive lives in Temporal, object storage or Postgres. Compliance is code inside the workflow and voice workers, so checking a rule never needs a network hop.</figcaption>
+  </figure>
+
+  <section>
+    <h2>Is it decided?</h2>
+    <div class="status">
+      <div>
+        <h3>Decided for v1 <span class="pill done">fixed</span></h3>
+        <ul>
+          <li>Three process types from one codebase</li>
+          <li>Cascaded pipeline: STT → LLM → TTS</li>
+          <li>Pipecat, Temporal, Postgres, no Redis</li>
+          <li>Where each piece of state lives</li>
+          <li>Compliance fails closed, runs in-process</li>
+          <li>Timeouts, retries and idempotency per call</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Provisional <span class="pill prov">measured later</span></h3>
+        <ul>
+          <li>Which STT, LLM and TTS: chosen by evals and P4 latency</li>
+          <li>Workflow details: designed in P7</li>
+          <li>Memory and RAG design: P8 and P9</li>
+          <li>Indian telephony: documented, not built</li>
+          <li>Hosting: local now, one VM later</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>One call, end to end</h2>
+    <ol>
+      <li>The loan system reports a failed EMI. The API saves it and starts a workflow for that account.</li>
+      <li>The workflow picks a time, rechecks payment, and runs the compliance gate: calling hours, stop flags, contact limits.</li>
+      <li>It writes the attempt row, then asks the telephony provider to dial.</li>
+      <li>When the borrower answers, the provider streams the audio to a voice worker. A pre-recorded greeting plays at once.</li>
+      <li>Each turn runs STT → LLM → TTS. Tools such as <code>verify_identity</code> and <code>create_promise</code> enforce the rules in code.</li>
+      <li>A promise is saved to Postgres before the agent says “confirmed”. The SMS with the payment link goes to the outbox.</li>
+      <li>After the call, the workflow updates the case state, sends the SMS, and sets a timer to check whether the promise was kept.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Three timing paths</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Path</th><th>Budget</th><th>What runs there</th></tr></thead>
+        <tbody>
+          <tr><td>Before the call</td><td>seconds</td><td>Pick accounts, compliance gate, load account and memory, warm connections</td></tr>
+          <tr><td>In the turn</td><td>~800 ms</td><td>STT, LLM, TTS, millisecond tools; save the promise and stop flags right away</td></tr>
+          <tr><td>After the call</td><td>seconds to days</td><td>SMS and payment link, summary and memory, case state, promise check</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>When something fails</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Failure</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td>Voice worker crashes</td><td>Only its live calls drop. The workflow records SYSTEM_FAILURE and retries later.</td></tr>
+          <tr><td>Workflow workers down</td><td>No new dials. Live calls continue. Temporal resumes every workflow where it stopped.</td></tr>
+          <tr><td>LLM slow or down</td><td>Agent says “one moment”, retries on a backup provider, then ends politely and schedules a callback.</td></tr>
+          <tr><td>Dial request times out</td><td>No immediate redial. Check what happened first; the normal retry policy calls later.</td></tr>
+          <tr><td>SMS provider down</td><td>Retries with backoff, then a dead-letter queue, an alert, and WhatsApp or a human.</td></tr>
+          <tr><td>Postgres down</td><td>No calls (compliance fails closed). A promise that cannot be saved is not confirmed.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Decisions behind it</h2>
+    <ul class="decisions">
+      <li><b>D-003</b> Compliance fails closed; its data lives apart</li>
+      <li><b>D-004</b> Identity check in code, never read out</li>
+      <li><b>D-005</b> Promise rules enforced in a tool</li>
+      <li><b>D-006</b> Stricter US rule set for everyone</li>
+      <li><b>D-007</b> Eval simulator kept consistent by scripts</li>
+      <li><b>D-008</b> Three process types, no Redis</li>
+      <li><b>D-009</b> Pipecat for voice</li>
+      <li><b>D-010</b> Cascaded pipeline, not speech-to-speech</li>
+      <li><b>D-011</b> Demo telephony on Twilio</li>
+      <li><b>D-012</b> Models chosen by evals</li>
+      <li><b>D-013</b> Local first, one VM later</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

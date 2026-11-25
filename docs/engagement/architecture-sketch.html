@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>YK Finance Architecture Sketch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap">
+<style>
+  body { margin: 0; background: #ffffff; color: #1e1e1e; }
+  .wrap { overflow-x: auto; padding: 16px; }
+  svg { display: block; width: 100%; min-width: 900px; max-width: 1400px; margin: 0 auto; height: auto;
+        font-family: "Kalam", "Comic Sans MS", cursive; }
+</style>
+</head>
+<body>
+<div class="wrap"><svg id="d" viewBox="0 0 1200 760" role="img"
+  aria-label="Architecture: outside systems, three stateless process types with compliance inside, and the state stores."></svg></div>
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script>
+const S = {"zoneLabelX": [14, 250, 390], "title": "YK Finance voice agent: architecture v1", "zones": [[20, 80, 1160, 130, "OUTSIDE SYSTEMS"], [20, 240, 1160, 170, "OUR PROCESSES · stateless"], [20, 450, 1160, 290, "STATE · must survive"]], "boxes": [["loan", 40, 115, 230, 70, "#ffec99", "Lender's loan system", "system of record"], ["borrower", 330, 115, 170, 70, "#ffec99", "Borrower", "on the phone"], ["tel", 560, 115, 260, 70, "#ffec99", "Telephony provider", "Twilio (demo) · Exotel/Plivo (India)"], ["ai", 890, 115, 270, 70, "#ffec99", "STT · LLM · TTS", "Deepgram · OpenAI · Cartesia + backups"], ["api", 40, 280, 230, 96, "#a5d8ff", "API", "webhooks · ops dashboard"], ["wf", 360, 280, 280, 96, "#a5d8ff", "Workflow workers", "Temporal · schedule · dial · retry"], ["voice", 720, 280, 300, 96, "#a5d8ff", "Voice workers", "Pipecat · STT → LLM → TTS + tools"], ["temporal", 420, 490, 220, 76, "#b2f2bb", "Temporal", "timers · workflow progress"], ["object", 780, 490, 200, 76, "#b2f2bb", "Object storage", "call recordings"], ["pg", 40, 640, 1120, 80, "#b2f2bb", "Postgres", "cases · attempts · promises · outbox   |   compliance schema: stop flags · contact rules · decisions"]], "badges": [[375, 362, 140, 30, "compliance lib"], [740, 362, 140, 30, "compliance lib"]], "note": [1040, 485, 125, 110, "Rules live in code.\nThe LLM only\nproposes."], "arrows": [[[[155, 185], [155, 278]], "EMI failed / paid", [165, 210], "start", false], [[[500, 150], [558, 150]], "call", [529, 140], "middle", true], [[[590, 185], [590, 225], [240, 225], [240, 278]], "call events", [420, 218], "middle", false], [[[620, 278], [620, 187]], "dial", [610, 262], "end", false], [[[760, 187], [760, 278]], "call audio", [770, 236], "start", true], [[[980, 278], [980, 187]], "audio ↔ text", [990, 236], "start", true], [[[120, 376], [120, 638]], "events", [130, 430], "start", false], [[[220, 376], [220, 528], [418, 528]], "start workflows", [318, 520], "middle", false], [[[560, 378], [560, 488]], "tasks · results", [570, 438], "start", true], [[[395, 394], [395, 638]], "case state", [405, 610], "start", false], [[[900, 394], [900, 488]], "recordings", [910, 438], "start", false], [[[1005, 378], [1005, 638]], "promises · stop flags", [995, 610], "end", false]]};
+const svg = document.getElementById("d");
+const rc = rough.svg(svg);
+const NS = "http://www.w3.org/2000/svg";
+let seed = 7;
+const o = (extra) => Object.assign({ roughness: 1.1, bowing: 1, stroke: "#1e1e1e", strokeWidth: 1.6, seed: seed++ }, extra);
+
+function text(x, y, str, size, opts = {}) {
+  const t = document.createElementNS(NS, "text");
+  t.setAttribute("x", x); t.setAttribute("y", y);
+  t.setAttribute("font-size", size);
+  t.setAttribute("text-anchor", opts.anchor || "start");
+  t.setAttribute("fill", opts.color || "#1e1e1e");
+  if (opts.bold) t.setAttribute("font-weight", "700");
+  t.textContent = str;
+  svg.appendChild(t);
+}
+
+text(40, 50, S.title, 30, { bold: true });
+
+for (const [x, y, w, h, label] of S.zones) {
+  svg.appendChild(rc.rectangle(x, y, w, h, o({ stroke: "#868e96", strokeWidth: 1.2, strokeLineDash: [8, 6], roughness: 0.8 })));
+  text(x + S.zoneLabelX[S.zones.findIndex(z => z[1] === y)], y + 22, label, 14, { color: "#6c757d" });
+}
+for (const [id, x, y, w, h, fill, title, sub] of S.boxes) {
+  svg.appendChild(rc.rectangle(x, y, w, h, o({ fill, fillStyle: "hachure", hachureGap: 7, fillWeight: 1.2 })));
+  text(x + w / 2, y + h / 2 - 2, title, 19, { anchor: "middle", bold: true });
+  text(x + w / 2, y + h / 2 + 20, sub, 14.5, { anchor: "middle", color: "#343a40" });
+}
+for (const [x, y, w, h, label] of S.badges) {
+  svg.appendChild(rc.rectangle(x, y, w, h, o({ fill: "#ffc9c9", fillStyle: "solid", strokeWidth: 1.3 })));
+  text(x + w / 2, y + 20, label, 14, { anchor: "middle" });
+}
+{
+  const [x, y, w, h, label] = S.note;
+  svg.appendChild(rc.rectangle(x, y, w, h, o({ fill: "#fff3bf", fillStyle: "solid", stroke: "#f08c00" })));
+  label.split("\n").forEach((line, i) => text(x + w / 2, y + 34 + i * 24, line, 16, { anchor: "middle" }));
+}
+function head(p, q) {
+  const a = Math.atan2(q[1] - p[1], q[0] - p[0]), L = 12, s = 0.45;
+  for (const d of [a + Math.PI - s, a + Math.PI + s])
+    svg.appendChild(rc.line(q[0], q[1], q[0] + L * Math.cos(d), q[1] + L * Math.sin(d), o({ roughness: 0.6 })));
+}
+for (const [pts, label, [lx, ly], align, both] of S.arrows) {
+  svg.appendChild(rc.linearPath(pts, o({ roughness: 0.9 })));
+  head(pts[pts.length - 2], pts[pts.length - 1]);
+  if (both) head(pts[1], pts[0]);
+  text(lx, ly, label, 15, { anchor: align, color: "#1971c2" });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: yk
+          POSTGRES_PASSWORD: yk
+          POSTGRES_DB: yk
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U yk"
+          --health-interval 2s
+          --health-retries 15
+    env:
+      DATABASE_URL: postgresql://yk:yk@localhost:5432/yk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --python 3.12
+      - run: uv run pytest -q

@@ -1,0 +1,19 @@
+# Local stack. Temporal is added in P7, the app processes in their phases.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: yk
+      POSTGRES_PASSWORD: yk
+      POSTGRES_DB: yk
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yk"]
+      interval: 2s
+      retries: 15
+
+volumes:
+  pgdata:
