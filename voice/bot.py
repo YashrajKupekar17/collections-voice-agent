@@ -9,6 +9,10 @@ Turn detection (TURN_MODE):
       flux             Deepgram Flux decides end of turn (Deepgram stack only)
 Then open http://localhost:7860 and click Connect.
 
+Phone (Twilio): expose port 7860 with a tunnel, then
+      uv run python -m voice.bot -t twilio -x <tunnel-host>
+      uv run python -m voice.dial <tunnel-host> <your-number>
+
 Latency per turn is printed and appended to voice/results/latency.jsonl.
 Summarize with: uv run python -m voice.latency_report
 """
@@ -26,7 +30,13 @@ from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
 from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
 from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import BotStartedSpeakingFrame, LLMRunFrame, VADUserStartedSpeakingFrame
+from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
+    EndWorkerFrame,
+    FunctionCallResultProperties,
+    LLMRunFrame,
+    VADUserStartedSpeakingFrame,
+)
 from pipecat.observers.base_observer import BaseObserver
 from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
 from pipecat.pipeline.pipeline import Pipeline
@@ -46,6 +56,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openai.stt import OpenAIRealtimeSTTService
 from pipecat.services.openai.tts import OpenAITTSService
 from pipecat.transports.base_transport import TransportParams
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.turns.user_start.min_words_user_turn_start_strategy import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_stop.turn_analyzer_user_turn_stop_strategy import TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import MergeMode, UserTurnStrategies, UserTurnStrategiesParams
@@ -62,6 +73,7 @@ SCENARIOS = ROOT.parent / "evals" / "scenarios.yaml"
 STACK = os.environ.get("VOICE_STACK", "deepgram")
 TURN_MODE = os.environ.get("TURN_MODE", "smartturn-short")
 CUT_IN_SECS = 1.0  # user speaks this soon after the bot starts: the bot probably answered too early
+VOICE_RULES = "\n- Say goodbye before you call end_call; the call hangs up right after it."
 MIN_INTERRUPT_WORDS = 2  # echo of the bot's own voice trips VAD but rarely produces two transcribed words
 FLUX_EOT_THRESHOLD = 0.7
 FLUX_EOT_TIMEOUT_MS = 1500
@@ -165,6 +177,7 @@ async def bot(runner_args: RunnerArguments):
 
     transport = await create_transport(runner_args, {
         "webrtc": lambda: TransportParams(audio_in_enabled=True, audio_out_enabled=True),
+        "twilio": lambda: FastAPIWebsocketParams(audio_in_enabled=True, audio_out_enabled=True),
     })
 
     stt, tts = speech_services(STACK, TURN_MODE)
@@ -174,13 +187,18 @@ async def bot(runner_args: RunnerArguments):
     async def run_tool(params):
         result = backend.call(params.function_name, dict(params.arguments))
         logger.info(f"tool {params.function_name}({dict(params.arguments)}) -> {result}")
-        await params.result_callback(result)
+        if params.function_name != "end_call":
+            await params.result_callback(result)
+            return
+        # Hang up: no further LLM turn, then end the pipeline after queued speech (the goodbye) plays.
+        await params.result_callback(result, properties=FunctionCallResultProperties(run_llm=False))
+        await params.llm.push_frame(EndWorkerFrame())
 
     for tool in TOOLS:
         llm.register_function(tool["function"]["name"], run_tool)
 
     context = LLMContext(
-        messages=[{"role": "system", "content": naive.system_prompt(account, TODAY)}],
+        messages=[{"role": "system", "content": naive.system_prompt(account, TODAY) + VOICE_RULES}],
         tools=tool_schemas(),
     )
     strategies, strategy_params = turn_strategies(TURN_MODE)

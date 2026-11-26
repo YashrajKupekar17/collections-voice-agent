@@ -8,6 +8,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "psycopg[binary]>=3.2",
     "pipecat-ai[deepgram,openai,runner,silero,webrtc]>=1.17.0",
+    "twilio>=9.13.0",
 ]
 
 [dependency-groups]

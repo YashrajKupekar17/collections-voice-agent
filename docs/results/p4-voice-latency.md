@@ -93,3 +93,23 @@ Only 3 turns, so this run can't rank Flux against Smart Turn. With Flux, the end
 Decision for now: Smart Turn with a 1.2 s fallback is the default (best measured p50, bounded misses). Flux stays as an option. The samples are too small to settle it; the next comparison should use automated voice tests with many turns, not manual calls.
 
 In every setup the LLM is now the largest cost (0.6–1.7 s per inference, two or three inferences on tool turns). That's the next thing to attack.
+
+## Run 5: real phone call, Twilio US number → mobile in India (2026-11-26, 4 turns)
+
+Deepgram STT/TTS, Smart Turn 1.2 s, 8 kHz phone audio over a cloudflared tunnel.
+
+| Stage | p50 | p95 |
+|---|---|---|
+| LLM inference (per call) | 1454 | 2338 |
+| Speech synthesis | 305 | 308 |
+| Transcription | 206 | 274 |
+| Endpointing wait | 200 | 200 |
+| Turn detection | 12 | 36 |
+| **Total (server side)** | **2433** | **3681** |
+
+Cut-ins: 1 of 4 turns. Greeting: 2.0 s after the call connected.
+
+What the phone call exposed:
+- **Misheard digits on phone audio.** The first identity check sent DOB 1990-05-05 instead of 1992-05-05 and failed; the second try passed. This is the false-fail risk from D-004, now seen on real 8 kHz audio.
+- **`end_call` didn't hang up.** The agent recorded PTP and called `end_call`, but the call stayed open. Later the agent called `end_call` again with the wrong code (ENDED_ABUSIVE for a polite goodbye). Fixed: `end_call` now ends the pipeline after the goodbye plays, with no further LLM turn.
+- **Server-side numbers only.** These don't include the phone network in each direction (Twilio edge to India and back). Caller-side latency needs a recording of both sides; not measured yet.
