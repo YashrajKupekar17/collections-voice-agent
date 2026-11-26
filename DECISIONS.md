@@ -104,3 +104,17 @@ Rejected: Kubernetes or a managed container platform for v1.
 Why: fits the budget and the timeline; the design (stateless processes, separate process types) already allows scaling out later.
 Cost: no autoscaling and a single point of failure; claims about 200 concurrent sessions are extrapolated from a one-worker load test.
 How we reduce the cost: say so plainly in the results; document what a multi-node deployment would change.
+
+## D-014: Deepgram for both speech-to-text and text-to-speech (2026-11-26)
+Chose: Deepgram streaming STT (Nova-3) and Deepgram TTS (Aura-2) as the first low-latency stack, replacing the provisional Cartesia pick in D-012. OpenAI STT/TTS stay as the backup stack. The stack is a config switch (`VOICE_STACK`), so stacks are compared on the same agent.
+Rejected: OpenAI STT/TTS as the main stack (run 1: TTS 968 ms and transcription 691 ms at p50); two vendors for STT and TTS for now.
+Why: one vendor, one key and one contract; both services stream over WebSockets with low time to first result.
+Cost: STT and TTS fail together if Deepgram is down (correlated failure); Aura voices may sound less natural than Cartesia or ElevenLabs; Hindi TTS support to be checked.
+How we reduce the cost: OpenAI as the fallback stack; measure Cartesia against Aura before calling it final.
+
+## D-015: Turn detection: Smart Turn v3 with a 1.2 s fallback, interruptions need 2 words (2026-11-26)
+Chose: Silero VAD + Smart Turn v3 with the silence fallback cut from 3 s to 1.2 s; the bot can be interrupted only after the user says 2 transcribed words while it speaks.
+Rejected for now: Pipecat's 3 s fallback (a missed end of turn cost ~2.8 s; Smart Turn missed often on Indian-accented English); Deepgram Flux end-of-turn (kept as an option: ~850 ms turn-end cost at p50 in a 3-turn test, too few turns to rank it); an LLM judging turn completion (adds an LLM call to every turn while the LLM is already the slowest stage).
+Why: measured p50 fell from 3.55 s to 2.27 s with no cut-ins in the test call. Two-word interruptions stopped the bot interrupting itself on speaker echo (VAD fired on its own voice).
+Cost: a borrower who pauses longer than 1.2 s mid-sentence may be cut off; one-word interruptions ("stop") while the bot talks are ignored; all samples are small (3–10 turns).
+How we reduce the cost: track the cut-in rate on every call; re-run the comparison with automated voice tests and many turns; handle "stop"-type words as a special case if they get missed.
