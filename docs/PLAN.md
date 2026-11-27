@@ -78,6 +78,7 @@ Goal: deterministic "may we call / say / offer this?" checks that the LLM cannot
 Questions: Rules in code or in data? Where is the check enforced (dialer, tool layer, both)? What does the system do when it cannot decide (fail closed)? How do we prove a call was compliant?
 Prior art: Open Policy Agent, rules engines in lending, Reg F 7-in-7 implementations.
 Measured: zero violations across the full scenario suite plus adversarial cases.
+Status: done. Compliance 22% → 100% (main and held-out) in the final run; six automated voice calls compliant. Open: indirect distress phrasing needs a classifier (P11); "yes" to the promise read-back is judged by the model. Results: docs/results/p5-compliance.md.
 
 ### P6. Data layer and idempotency
 

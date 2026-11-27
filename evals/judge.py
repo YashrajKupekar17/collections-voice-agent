@@ -17,6 +17,8 @@ def format_transcript(transcript):
     for e in transcript:
         if "speaker" in e:
             lines.append(f"{e['speaker'].upper()}: {e['text']}")
+        elif "tool" not in e:
+            continue  # blocked sentences and signal notes: the judge rates what the caller heard
         else:
             lines.append(f"[tool {e['tool']} {json.dumps(e['args'])} -> {json.dumps(e['result'])}]")
     return "\n".join(lines)

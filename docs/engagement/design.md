@@ -91,3 +91,34 @@ Asymmetry for dialing: a second call seconds after the first is harassment and c
 | Database | Postgres | D-008 |
 | Recordings | S3-compatible object storage | Section 3 |
 | Deployment | Local Docker Compose now; one VM in a Mumbai region with Caddy for HTTPS when hosting | D-013 |
+
+## 6. Compliance: where rules are checked
+
+One library decides (the policy decision point). Seven checkpoints ask it before acting and block on "no" (policy enforcement points). Every check is code with no model in it, returns a list of broken rules (empty means allowed), and is logged to `compliance.decision`.
+
+Three ways to stop a bad action, strongest first:
+1. Don't give the model the data. Loan details enter the model's context only in the result of a successful `verify_identity`.
+2. Don't give it the action. Tools check the rules and refuse with a reason.
+3. Check its words. Each sentence is checked before it goes to TTS.
+
+Rules in the prompt stay, but only as guidance. Nothing relies on them.
+
+| # | Checkpoint | Rules | Enforced by |
+|---|---|---|---|
+| 1 | Before dial | Calling window in the borrower's local time; stop, avoid-time and voice-not-allowed flags; case still open; number not bad; US consent for AI voice; India 3 attempts a day per loan; US 7 attempts in 7 days per loan and none within 7 days after a conversation | `compliance.dial.check_dial`, called by the workflow before every dial, callbacks included |
+| 2 | Call opens | AI and recording disclosure first; voicemail gets a message with no debt details | The prompt now, checked by evals; fixed text spoken by code is planned with voicemail detection |
+| 3 | Input | Distress and stop requests must change what the agent does | `compliance.input.check_input` on each caller message: adds a note for the model; after distress, money talk is blocked and code speaks a support line when the call ends. Attorney and dispute are left to the model and checked by evals |
+| 4 | Tools | `create_promise` only when verified and inside the promise rules; at most 2 verification attempts | `compliance.tools.check_tool`, called inside the tool |
+| 5 | Output | Before verification: no amounts, loan number or loan words. Never: DOB or postal code read aloud, threats, waivers or settlements, claiming to be human | `compliance.output.check_reply`, run per sentence before TTS |
+| 6 | Call stage | Disclosure → verify → (US) debt notice → discuss | Verification state held in code, not in the model |
+| 7 | After the call | Stop requests saved as flags; attempts counted per loan; decisions logged | Postgres writes plus `compliance.decision` |
+
+When a sentence is blocked:
+- The caller hears a fixed safe line instead, chosen by the rule broken. For a loan detail before verification it asks for verification, so the call moves forward.
+- A note goes into the model's context saying the reply was not spoken and why, so the model doesn't repeat or build on it.
+- The block is logged (call, rule, blocked text) and counted. Blocks per call are a metric: a rise after a prompt change means the model got worse, even if no violation reached the caller.
+- The same rule blocked twice in one call ends the call politely and hands the case to a human.
+
+Code checks catch exact values and listed words. They miss paraphrases ("the people in uniform may visit you") and negation tricks. Those are covered by the eval judge after the call, not live: a model check on every sentence would add 300 ms or more to the turn.
+
+Contact limits count per loan, because Reg F counts per debt: attempts are joined to their case, and the case to its loan. A per-borrower cap across loans can be added as client config.

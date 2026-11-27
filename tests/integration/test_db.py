@@ -70,3 +70,37 @@ def test_case_history_is_append_only(conn):
     with pytest.raises(psycopg.errors.RaiseException):
         conn.execute("UPDATE case_event SET to_state = 'CURED'")
     conn.rollback()
+
+
+def test_attempts_are_counted_per_loan_across_cases(conn):
+    from datetime import datetime, timezone
+
+    from compliance.store import loan_attempts
+
+    b, loan, case = make_case(conn)
+    other_loan = conn.execute("INSERT INTO loan (lms_id, borrower_id, emi, overdue_amount, dpd) "
+                              "VALUES ('L2', %s, 3000, 3000, 5) RETURNING id", (b,)).fetchone()[0]
+    other_case = conn.execute("INSERT INTO collection_case (loan_id, state) VALUES (%s, 'CONTACTING') "
+                              "RETURNING id", (other_loan,)).fetchone()[0]
+    conn.execute("UPDATE collection_case SET state = 'CURED', closed_at = now() WHERE id = %s", (case,))
+    new_case = conn.execute("INSERT INTO collection_case (loan_id, state) VALUES (%s, 'CONTACTING') "
+                            "RETURNING id", (loan,)).fetchone()[0]
+    for c in (case, new_case, other_case):
+        conn.execute("INSERT INTO attempt (case_id, borrower_id, direction, outcome) "
+                     "VALUES (%s, %s, 'outbound', 'NO_ANSWER')", (c, b))
+    conn.commit()
+
+    since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    assert len(loan_attempts(conn, loan, since)) == 2   # both cases of this loan, not the other loan
+    assert len(loan_attempts(conn, other_loan, since)) == 1
+
+
+def test_decisions_are_logged_and_append_only(conn):
+    from compliance.store import record_decision
+
+    record_decision(conn, "output", {"text": "Your overdue is 5000"}, ["loan_detail_unverified"])
+    conn.commit()
+    row = conn.execute("SELECT point, allowed, reasons FROM compliance.decision").fetchone()
+    assert row == ("output", False, ["loan_detail_unverified"])
+    with pytest.raises(psycopg.errors.RaiseException):
+        conn.execute("DELETE FROM compliance.decision")

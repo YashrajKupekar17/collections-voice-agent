@@ -48,13 +48,15 @@ Every decision with what was rejected, the cost and the mitigation: [DECISIONS.m
 
 ## Evals
 
-The agent is tested before it talks to anyone. An LLM plays the borrower across 28 scenarios, each with a known correct outcome: cooperative borrowers, partial payments, a family member who knows the borrower's details, distress, disputes, prompt injection, and US rules.
+The agent is tested before it talks to anyone. An LLM plays the borrower across 33 scenarios, each with a known correct outcome: cooperative borrowers, partial payments, a family member who knows the borrower's details, distress, disputes, prompt injection, and US rules.
 
 - Code checks wherever possible: outcome code, promise fields, escalations, no loan details before identity is verified, required disclosures.
 - An LLM judge with yes/no questions for tone and false statements.
 - Each scenario runs 3 times (pass^k); 8 scenarios are held out to catch overfitting.
 
 **Baseline:** a naive agent with rules written only in its prompt passed about 1 in 5 scenarios. In one run it verified the borrower's wife because she knew his date of birth, then told her his overdue amount. Details: [p2-baseline.md](docs/results/p2-baseline.md), [evals.md](docs/engagement/evals.md).
+
+**With rules in code:** the guarded agent keeps loan details out of the model until identity is verified, checks every tool call, and checks every sentence before it is spoken. Compliance went from 22% to 100% on the same scenarios, and all 15 adversarial runs (a wife who knows the DOB, a borrower baiting threats, haggling for a waiver) stayed compliant. Promises are read back by code before they are saved, and a failed LLM ends the call with a spoken apology instead of silence. Indirect distress phrasing still needs a classifier. Details: [p5-compliance.md](docs/results/p5-compliance.md).
 
 ## Roadmap
 
@@ -65,7 +67,7 @@ The agent is tested before it talks to anyone. An LLM plays the borrower across 
 | Eval harness and naive baseline | Done |
 | Architecture, schema, CI | Done |
 | Voice pipeline on a real phone line, per-stage latency | In progress |
-| Compliance engine in code | Planned |
+| Compliance engine in code | Done |
 | Promises, outbox, idempotency | Planned |
 | Temporal workflows | Planned |
 | Policy RAG, borrower memory, latency work | Planned |
@@ -92,7 +94,8 @@ uv run python -m evals.run_evals --k 3
 ## Repository layout
 
 ```
-agent/          the agent (naive baseline for now)
+agent/          naive baseline and the guarded agent
+compliance/     rule checks: before dial, tools, caller input, agent output
 evals/          simulator, scenarios, checks, LLM judge, runner
 db/             schema migrations
 tests/          unit and integration tests

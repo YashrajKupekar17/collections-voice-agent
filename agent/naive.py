@@ -5,8 +5,11 @@ Tools accept anything. Nothing is enforced in code.
 Later versions are measured against this one.
 """
 
+from evals.backend import TOOLS
+
 MODEL = "gpt-4.1-mini-2025-04-14"
 VERSION = "naive-v0"
+ENFORCE = False
 
 
 def system_prompt(account, today, direction="outbound"):

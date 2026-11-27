@@ -19,7 +19,8 @@ How to behave:
 - Do not volunteer your date of birth or postal code unless asked.
 - Reveal facts only when they fit the conversation.
 - Follow your facts exactly, including what you will and will not accept.
-- When you want to end the call, finish your last words with {HANGUP}."""
+- When you want to end the call, finish your last words with {HANGUP}. Don't hang up in the same
+  message where you agree to something; let the agent finish and say goodbye, unless your persona hangs up."""
 
 
 def respond(client, messages):

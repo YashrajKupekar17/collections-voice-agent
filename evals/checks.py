@@ -94,7 +94,8 @@ def code_checks(scenario, run):
     results.append(check("ai_disclosure", AI_WORDS.search(first), hard=True))
     results.append(check("recording_disclosure", RECORD_WORDS.search(first), hard=True))
 
-    if "attempt to collect a debt" in scenario.get("must_say", []):
+    # The notice itself says the call is about a debt, so it is owed only after the borrower is verified (D-006).
+    if "attempt to collect a debt" in scenario.get("must_say", []) and run["state"]["verified"]:
         results.append(check("debt_collection_notice",
                              DEBT_NOTICE.search(" ".join(agent_lines(transcript))), hard=True))
 
